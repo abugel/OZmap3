@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>My Map</title>
+	<!--Leaflet-->
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css" />
+	<script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
+
+	<script src="data/alloz.geojson"></script>
+	<script src="data/allct.geojson"></script>
+
+	<script src="./lib/js/leaflet-gplaces-autocomplete.js"></script>
+
+	<link rel="stylesheet" href="./lib/css/leaflet-gplaces-autocomplete.css" />
+
+	<script src="https://maps.googleapis.com/maps/api/js?libraries=places&key=AIzaSyA2f2jX-ViOOCrURi3W8m3pz4QM23yg_bw"></script>
+
+	<script src="https://cdn.jsdelivr.net/npm/@turf/turf@5/turf.min.js"></script>
+	<style type="text/css">
+		#map {
+			height: 400px;
+		}
+
+		#results {
+			height: 35%;
+			display: flex;
+			flex-direction: row;
+			justify-content: space-around;
+		}
+	</style>
+</head>
+
+<body>
+	<h1>OZ Map</h1>
+	<div id="map"></div>
+
+	<div id="results">
+		<div>
+			<h3>allct</h3>
+			<div id="allct-results"></div>
+		</div>
+		<div>
+			<h3>alloz</h3>
+			<div id="alloz-results"></div>
+		</div>
+	</div>
+
+	<script>
+		function ozLayerStyle(feature) {
+			return {
+				fillColor: 'red',
+				weight: 2,
+				opacity: 0.5,
+				fillOpacity: 0.7,
+			}
+
+		}
+
+		function ozLayerStyleSelected(feature) {
+			return {
+				fillColor: 'red',
+				weight: 2,
+				opacity: 1,
+				fillOpacity: 0.7,
+				stroke: true,
+				color: 'yellow'
+			}
+
+		}
+
+		function ctLayerStyle(feature) {
+			return {
+				fillColor: 'grey',
+				weight: .05,
+				opacity: 0.5,
+				fillOpacity: 0.2,
+			}
+		}
+		var map = L.map('map').setView([40.712, -74.003], 10);
+
+		L.tileLayer(
+			'https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw', {
+				maxZoom: 18,
+				attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
+					'<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+					'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+				id: 'mapbox.light'
+			}).addTo(map);
+
+
+
+		var ozLayer = L.geoJson(
+			alloz, {
+				style: ozLayerStyle
+			}
+		).addTo(map);
+
+		var ctlayer = L.geoJson(allct, {
+			style: ctLayerStyle
+		}).addTo(map);
+
+
+		//create oz selected layer with popup
+		var ozLayerSelected = L.geoJson({
+			"type": "FeatureCollection",
+			"features": []
+		}, {
+			style: ozLayerStyleSelected
+		}).bindPopup(function (layer) {
+			if (layer.feature.properties) {
+				console.log(layer.feature.properties)
+
+				var tableElement = document.createElement('table');
+				Object.keys(layer.feature.properties).forEach(function (key) {
+					var row = tableElement.insertRow(0);
+					row.insertCell(0).innerHTML = key
+					row.insertCell(1).innerHTML = layer.feature.properties[key]
+
+				})
+				return tableElement
+			}
+		}).addTo(map);
+
+
+		//create temp marker
+		var marker = L.marker([0, 0]).addTo(map);
+
+
+		function generateIntersectFeaturesHTML(point, geojson, id) {
+			//find all polygons that contain the point
+			var polyIntersects = geojson.features.filter(function (feature) {
+				var poly = turf.multiPolygon(feature.geometry.coordinates)
+				return turf.booleanPointInPolygon(point, poly);
+			})
+
+			return {
+				"type": "FeatureCollection",
+				"features": polyIntersects
+			};
+		}
+
+
+		new L.Control.GPlaceAutocomplete({
+			callback: function (place) {
+
+				var loc = place.geometry.location;
+				var lat = loc.lat();
+				var lng = loc.lng();
+
+				var point = turf.point([lng, lat]);
+
+				//get geojson of selected
+				var allctGeojson = generateIntersectFeaturesHTML(point, allct, 'allct-results');
+				var allozGeojson = generateIntersectFeaturesHTML(point, alloz, 'alloz-results');
+
+				//reset layer and add new data to layer
+				ozLayerSelected.clearLayers();
+				ozLayerSelected.addData(allozGeojson);
+
+				map.setZoom(16);
+				marker.setLatLng([lat, lng]);
+				map.panTo([lat, lng]);
+
+			}
+
+		}).addTo(map);
+	</script>
+
+</body>
+
+</html>
